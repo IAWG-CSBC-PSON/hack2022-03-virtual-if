@@ -6,7 +6,7 @@ import dask.array as da
 
 # use zarr==2.10.3
 
-def tifffile_to_dask(im_fp: Union[str,Path]) - > Union[da.array, List[da.Array]]:
+def tifffile_to_dask(im_fp: Union[str,Path]) -> Union[da.array, List[da.Array]]:
     imdata = zarr.open(imread(im_fp, aszarr=True))
     if isinstance(imdata, zarr.hierarchy.Group):
         imdata = [da.from_zarr(imdata[z]) for z in imdata.array_keys()]
