@@ -96,7 +96,7 @@ tiler.get_tile(dask_im, tile_idx=600)
 Out[2]: dask.array<getitem, shape=(3, 512, 512), dtype=uint16, chunksize=(1, 509, 482), chunktype=numpy.ndarray>
 ```
 
-
+Another [example](finding_tissue_mask_tiles.py) using the tissue mask to extact underlying tiles. 
 
 ## Some background on virtual staining
 
