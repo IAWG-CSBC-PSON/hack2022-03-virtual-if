@@ -17,18 +17,18 @@ def tifffile_to_dask(im_fp: Union[str,Path]) - > Union[da.array, List[da.Array]]
   
 af_im = tifffile_to_dask("./AF/S01-AF.tiff")
 
-dask_im = tifffile_to_dask("./tissue-images/tissue-masks/S01-tissue-mask.tiff")
+mask_im = tifffile_to_dask("./tissue-images/tissue-masks/S01-tissue-mask.tiff")
 # read image into memory it's np.uint8 so smaller footprint
-mask_im = dask_im.compute()
+mask_im_in_memory = dask_im.compute()
 
 # initialize tiler
-tiler = Tiler(data_shape=mask_im.shape,
+tiler = Tiler(data_shape=mask_im_in_memory.shape,
               tile_shape=(512, 512),
               overlap=0.2)
 
 # get index of all tiles that overlap with the mask greater than 75%
 tile_overlaps = []
-for idx, tile in tiler.iterate(mask_im):
+for idx, tile in tiler.iterate(mask_im_in_memory):
     npx_in_mask = np.sum(tile) / 255
     overlap_with_mask = (np.sum(tile) / 255) / tile.size
     if overlap_with_mask > 0.75:
