@@ -80,7 +80,7 @@ Out[1]: dask.array<from-zarr, shape=(3, 31279, 36802), dtype=uint16, chunksize=(
 ```
 
 ### tiling example
-`tiler` is a python library for tiling arrays
+`tiler`[https://pypi.org/project/tiler/] is a python library for tiling arrays.
 ```python
 from tiler import Tiler
 
