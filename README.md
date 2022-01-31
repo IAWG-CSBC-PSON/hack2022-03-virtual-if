@@ -45,9 +45,58 @@ The data is organized into sub-folders, each containing 4 or 8 images. All AF im
 ## Cosniderations for developing the virtual staining
 4 of the AF images (S01-04) have corresponding IF for all labels, 4 only have AQP1,Nuclei,Podocalyxin, and Uromodulin. One way to organize the challenge is to try various approaches going from AF to a single label, i.e., AF -> AQP1 to discover what works, and then expand from there. It is NOT necessary to have a single model that predicts all species if better performance is achieved by splitting channels.
 
-These images are on the order of 20000-30000 pixels in x and y dimension, so are quite large. Tiling the data will be critical and smarting tiling training and validation sets is advised.
+These images are on the order of 20000-30000 pixels in x and y dimension, so are quite large. Tiling the data will be critical and smarting tiling for train and validation sets is advised.
 
 Evaluation metrics are still an area of exploration. Segmentation masks could be developed for some labels or for nuclei but this is an area this hackathon could explore.
+
+## Necessary computing environment
+
+Most virtual staining in recent years has been performed using deep learning. Efficient development will necessitate a GPU equiped machine and will probably most easily be done in python. The size of images, while large, can be managed by using out-of-memory operations in python through `tifffile` + `dask` + `zarr` . Other libraries that could be useful:  
+
+```python
+from typing import Union, List
+from pathlib import Path
+from tifffile import imread
+import zarr
+import dask.array as da
+
+# use zarr==2.10.3
+
+def tifffile_to_dask(im_fp: Union[str,Path]) - > Union[da.array, List[da.Array]]:
+    imdata = zarr.open(imread(im_fp, aszarr=True))
+    if isinstance(imdata, zarr.hierarchy.Group):
+        imdata = [da.from_zarr(imdata[z]) for z in imdata.array_keys()]
+    else:
+        imdata = da.from_zarr(imdata)
+    return imdata
+
+dask_im = tifffile_to_dask("./AF/S01-AF.tiff")
+
+```
+
+This produces a dask image that reads the chunks of the AF image, allowing read into memory of specific areas of the image without reading in the entire array into memory
+```python
+Out[1]: dask.array<from-zarr, shape=(3, 31279, 36802), dtype=uint16, chunksize=(1, 512, 512), chunktype=numpy.ndarray>
+```
+
+### tiling example
+`tiler` is a python library for tiling arrays
+```python
+from tiler import Tiler
+
+tiler = Tiler(data_shape=dask_im.shape,
+              tile_shape=(3, 256, 256),
+              channel_dimension=0
+              overlap=0.2)
+
+tiler.get_tile(dask_im, tile_idx=600)
+
+```
+```python
+Out[2]: dask.array<getitem, shape=(3, 512, 512), dtype=uint16, chunksize=(1, 509, 482), chunktype=numpy.ndarray>
+```
+
+
 
 ## Some background on virtual staining
 
