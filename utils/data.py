@@ -2,6 +2,7 @@
 
 import torch
 from torchvision.transforms import Compose, ToTensor, Resize, Normalize
+from torchvision.transforms import InterpolationMode
 from torch.utils.data import Dataset, DataLoader, SubsetRandomSampler
 from typing import Union, List
 import os
@@ -15,6 +16,7 @@ from glob import glob
 from skimage import img_as_ubyte
 from tiler import Tiler
 import time
+
 
 def tifffile_to_dask(im_fp: Union[str, Path]) -> Union[da.array, List[da.Array]]:
     imdata = zarr.open(imread(im_fp, aszarr=True))
@@ -95,7 +97,7 @@ def physical_dirs_from_virtual(dir_path, virtual_dir):
 
 
 def write_tile_idxs(virtual_dir, write_dir, tile_shape=(512, 512), tile_overlap=0.2, mask_overlap=0.75):
-    print("EXTRACTING TILES")
+    print("\nEXTRACTING TILES")
 
     if not os.path.isdir(write_dir):
         os.makedirs(write_dir)
@@ -106,8 +108,11 @@ def write_tile_idxs(virtual_dir, write_dir, tile_shape=(512, 512), tile_overlap=
         mask_tiler = Tiler(
             data_shape=mask_im.shape, 
             tile_shape=tile_shape, 
-            overlap=tile_overlap
+            overlap=tile_overlap,
+            mode="constant",
+            constant_value=0
         )
+        assert (mask_tiler.data_shape == mask_im.shape).all()
         tile_overlaps = []
         for idx, tile in mask_tiler.iterate(mask_im):
             npx_in_mask = np.sum(tile) / 255
@@ -118,7 +123,10 @@ def write_tile_idxs(virtual_dir, write_dir, tile_shape=(512, 512), tile_overlap=
         tile_data = {
             "idxs": tile_overlaps,
             "n_tiles": mask_tiler.n_tiles,
-            "im_shape": mask_im.shape,
+            "im_shape": mask_tiler.data_shape,
+            "padded_im_shape": mask_tiler._new_shape,
+            "tiler_pad_mode": mask_tiler.mode, ## Should be "constant"
+            "tiler_pad_val": mask_tiler.constant_value, ## Should be 0
             "tile_shape": tuple(mask_tiler.tile_shape),
             "tile_overlap": mask_tiler.overlap
         }
@@ -132,11 +140,15 @@ class VIFDataset(Dataset):
         self, 
         vif_virtual_dir,
         idx_file_dir,
-        transform = None
+        normalize_whole_slide=True,
+        af_transform = None,
+        if_transform = None,
     ):
         self.vif_dir = vif_virtual_dir
         self.idx_file_dir = idx_file_dir
-        self.transform = transform
+        self.normalize_whole_slide = normalize_whole_slide
+        self.af_transform = af_transform
+        self.if_transform = if_transform
         self.dask_ims = {}
         
         self.get_data()
@@ -144,15 +156,20 @@ class VIFDataset(Dataset):
     def get_data(self):
         data = []
         for sid, sample in self.vif_dir.items():
-            (idxs, n_tiles, im_shape, 
-                tile_shape, tile_overlap) = self.load_tile_data(sid)
+            (idxs, n_tiles, im_shape, pad_im_shape, tile_shape, 
+                tile_overlap, tiler_pad_mode, tiler_pad_val) = self.load_tile_data(sid)
+            im_shape = tuple(im_shape)
+            pad_im_shape = tuple(pad_im_shape)
             names = []
             ims = {}
             for n, s in sample.items():
                 if n == 'tissue-mask':
                     continue
                 names.append(n)
+
                 im = tifffile_to_dask(s)
+                if self.normalize_whole_slide:
+                    im = im / np.iinfo(im.dtype).max
 
                 if n == "AF":
                     assert im.shape == (3,) + im_shape, f"{s} has shape {im.shape} but should be {(3,) + im_shape}"
@@ -163,9 +180,20 @@ class VIFDataset(Dataset):
                 im_tiler = Tiler(
                     data_shape=im.shape,
                     tile_shape=im_tile_shape,
-                    overlap=tile_overlap
+                    overlap=tile_overlap,
+                    mode=tiler_pad_mode,
+                    constant_value=tiler_pad_val,
                 )
+
                 assert im_tiler.n_tiles == n_tiles, f"{s} has {im_tiler.n_tiles} tiles but should be {n_tiles}"
+
+                if n == "AF":
+                    assert tuple(im_tiler._new_shape) == (3,) + pad_im_shape, (f"{s} has post-padding shape {tuple(im_tiler._new_shape)} "
+                        f"but should be {(3,) + pad_im_shape}")
+                else:
+                    assert tuple(im_tiler._new_shape) == pad_im_shape, (f"{s} has post-padding shape {tuple(im_tiler._new_shape)} " 
+                        f"but should be {pad_im_shape}")
+
                 ims[n] = (im, im_tiler)
             
             self.dask_ims[sid] = ims
@@ -179,27 +207,45 @@ class VIFDataset(Dataset):
         if not os.path.isfile(idx_file):
             raise FileNotFoundError(f"{idx_file} does not exist")
         idx_data = np.load(idx_file, allow_pickle=True).item()
-        return (idx_data["idxs"], idx_data["n_tiles"], idx_data["im_shape"], 
-            idx_data["tile_shape"], idx_data["tile_overlap"])
+        return (idx_data["idxs"], idx_data["n_tiles"], idx_data["im_shape"], idx_data["padded_im_shape"],
+            idx_data["tile_shape"], idx_data["tile_overlap"], idx_data["tiler_pad_mode"], idx_data["tiler_pad_val"])
 
     def __getitem__(self, index):
         sid, names, idx = self.data[index]
-        tiles = []
+        af_im, af_tiler = self.dask_ims[sid]["AF"]
+        ll_coord, ur_coord = af_tiler.get_tile_bbox(idx)
+        ll_coord, ur_coord = ll_coord[1:], ur_coord[1:]
+        af_tile = af_tiler.get_tile(af_im, idx).compute()
+        af_tile = torch.from_numpy(af_tile).float()
+        if not self.af_transform is None:
+            af_tile = self.af_transform(af_tile)
+
+        if_tiles = []
+        channels = []
         for n in names:
-            im, im_tiler = self.dask_ims[sid][n]
-            tile = im_tiler.get_tile(im, idx).compute()
-            tile = img_as_ubyte(tile)
-            tile = torch.from_numpy(tile).float()
-            tile /= 255
-            if self.transform is not None:
-                tile = self.transform(tile)
             if n == "AF":
-                tiles.insert(0, tile)
-            else:
-                tiles.append(tile.unsqueeze(0))
+                continue
+            channels.append(n)
+            im, im_tiler = self.dask_ims[sid][n]
+            im_ll_coord, im_ur_coord = im_tiler.get_tile_bbox(idx, with_channel_dim=False)
+            assert (ll_coord == im_ll_coord).all() and (ur_coord == im_ur_coord).all(), (f"{sid} {n} {idx} has ll_coord {im_ll_coord} " 
+                f"and ur_coord {im_ur_coord} but should be {ll_coord} and {ur_coord}")
+            tile = im_tiler.get_tile(im, idx).compute()
+            tile = torch.from_numpy(tile).float()
+            if_tiles.append(tile)
         
-        tiles = torch.concat(tiles, dim=0)
-        return {"sid": sid, "tile_id": idx, "channels": names}, tiles
+        if_tiles = torch.stack(if_tiles, dim=0)
+        if not self.if_transform is None:
+            if_tiles = self.if_transform(if_tiles)
+        return {
+            "A": af_tile, 
+            "B": if_tiles, 
+            "sid": sid, 
+            "tile_idx": idx,
+            "ll_coord": ll_coord,
+            "ur_coord": ur_coord, 
+            "channels": channels
+        }
 
     def __len__(self):
         return len(self.data)
@@ -270,8 +316,8 @@ if __name__ == "__main__":
     ## AF image also copied, creating paired, sample-specific domain A --> domain B data folder
     ## Note: not yet tested with the SHIFT repo
     ## Note: whole slide images are copied, but can be easily modified to copy image tiles
-    # shift_data_path = "/home/users/strgar/strgar/vif-hack/data/shift"
-    # physical_dirs_from_virtual(shift_data_path, virtual_dir)
+    shift_data_path = "/home/users/strgar/strgar/vif-hack/data/shift"
+    physical_dirs_from_virtual(shift_data_path, virtual_dir)
 
     ## Extract "good" tiles from tissue masks contained in the virtual directory
     ## Save the good tile indices along with some metadata to a file on disk
@@ -285,27 +331,42 @@ if __name__ == "__main__":
     ##     "n_tiles": Number of tiles in the mask,
     ##     "im_shape": Mask shape (height, width),
     ##     "tile_shape": Tile shape (height, width),
+    ##     "padded_im_shape": Mask shape after padding,
+    ##     "tiler_pad_mode": mask_tiler padding mode, ## Should be "constant"
+    ##     "tiler_pad_val": mask_tiler padding value, ## Should be 0
     ##     "tile_overlap": float (0.0 - 1.0)
     ## }
     tile_data_write_dir = "/home/users/strgar/strgar/vif-hack/data/tile_data"
-    # if not os.path.isdir(tile_data_write_dir):
-    #     tile_shape=(512, 512)
-    #     tile_overlap=0.2
-    #     mask_overlap=0.75
-    #     write_tile_idxs(
-    #         virtual_dir,
-    #         tile_data_write_dir,
-    #         tile_shape=tile_shape, 
-    #         tile_overlap=tile_overlap, 
-    #         mask_overlap=mask_overlap
-    #     )
+    tile_shape = (512, 512)
+    tile_overlap = 0.2
+    mask_overlap = 0.75
+    if not os.path.isdir(tile_data_write_dir):
+        tile_shape=tile_shape
+        tile_overlap=tile_overlap
+        mask_overlap=mask_overlap
+        write_tile_idxs(
+            virtual_dir,
+            tile_data_write_dir,
+            tile_shape=tile_shape, 
+            tile_overlap=tile_overlap, 
+            mask_overlap=mask_overlap
+        )
 
+
+    ## Images were tiled according to "tile_shape" above
+    ## Unless you have a lot of memory we likely we want to resize images to at most 256x256
+    ## For some reason BILINEAR interpolation throws an error (I think this is a Torch bug)
+    af_transform = Compose([Resize((256, 256), InterpolationMode.BICUBIC),])
+    if_transform = Compose([Resize((256, 256), InterpolationMode.BICUBIC),])
 
     ## Create the dataset
+    ## Normalize whole slide mean scale image to [0, 1] using max dtype value (e.g. for uint16, 2**16-1)
     dataset = VIFDataset(
         virtual_dir,
         tile_data_write_dir,
-        transform=None,
+        af_transform=af_transform,
+        if_transform=if_transform,
+        normalize_whole_slide=True,
     )
 
     print("Total number samples: ", len(dataset))
@@ -321,10 +382,19 @@ if __name__ == "__main__":
         train_frac=0.9,
         seed=101,
         shuffle=True,
-        seed=101,
     )
 
     ## Sample a few training points from the trainloader
+    ## Dataset __getitem__ returns a dictionary:
+    # {
+    #     "A": AF image (3, H, W), 
+    #     "B": IF images (C, H, W), 
+    #     "sid": Sample id, 
+    #     "tile_idx": Tile index,
+    #     "ll_coord": Lower left coordinate of tile,
+    #     "ur_coord": Upper right coordinate of tile,, 
+    #     "channels": List of marker names corresponding to IF images (e.g. ["AQP1", "Podocalyxin", "Uromodulin"])
+    # }
     print("\nSAMPLE TRAINING DATA")
     for i, (meta, ims) in enumerate(trainloader):
         print(f"    Sample {i}/{len(trainloader)}")
