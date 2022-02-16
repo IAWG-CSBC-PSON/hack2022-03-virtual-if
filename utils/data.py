@@ -143,12 +143,14 @@ class VIFDataset(Dataset):
         normalize_whole_slide=True,
         af_transform = None,
         if_transform = None,
+        adap_reg_thresh = 0.25,
     ):
         self.vif_dir = vif_virtual_dir
         self.idx_file_dir = idx_file_dir
         self.normalize_whole_slide = normalize_whole_slide
         self.af_transform = af_transform
         self.if_transform = if_transform
+        self.adap_reg_thresh = adap_reg_thresh
         self.dask_ims = {}
         
         self.get_data()
@@ -237,9 +239,16 @@ class VIFDataset(Dataset):
         if_tiles = torch.stack(if_tiles, dim=0)
         if not self.if_transform is None:
             if_tiles = self.if_transform(if_tiles)
+
+        if not self.adap_reg_thresh is None:
+            B_prev = (if_tiles > self.adap_reg_thresh).sum() / (if_tiles.shape[1] * if_tiles.shape[2])
+        else:
+            B_prev = None
+
         return {
             "A": af_tile, 
-            "B": if_tiles, 
+            "B": if_tiles,
+            "B_prev": B_prev,
             "sid": sid, 
             "tile_idx": idx,
             "ll_coord": ll_coord,
@@ -361,12 +370,14 @@ if __name__ == "__main__":
 
     ## Create the dataset
     ## Normalize whole slide mean scale image to [0, 1] using max dtype value (e.g. for uint16, 2**16-1)
+    ## Including adap_reg_thresh makes samples compatible with SHIFT scheme.
     dataset = VIFDataset(
         virtual_dir,
         tile_data_write_dir,
         af_transform=af_transform,
         if_transform=if_transform,
         normalize_whole_slide=True,
+        adap_reg_thresh=0.25
     )
 
     print("Total number samples: ", len(dataset))
@@ -388,7 +399,8 @@ if __name__ == "__main__":
     ## Dataset __getitem__ returns a dictionary:
     # {
     #     "A": AF image (3, H, W), 
-    #     "B": IF images (C, H, W), 
+    #     "B": IF images (C, H, W),
+    #     "B_prev": Adaptive reg scalar (or None),
     #     "sid": Sample id, 
     #     "tile_idx": Tile index,
     #     "ll_coord": Lower left coordinate of tile,
@@ -396,15 +408,24 @@ if __name__ == "__main__":
     #     "channels": List of marker names corresponding to IF images (e.g. ["AQP1", "Podocalyxin", "Uromodulin"])
     # }
     print("\nSAMPLE TRAINING DATA")
-    for i, (meta, ims) in enumerate(trainloader):
+    for i, samp in enumerate(trainloader):
         print(f"    Sample {i}/{len(trainloader)}")
+        print(f"    Batch size: {samp['A'].shape[0]}")
         print("    METADATA")
-        for k, v in meta.items():
-            print(f"\t{k}: {v}")
+        print(f"\tSample id: {samp['sid']}")
+        print(f"\tTile index: {list(samp['tile_idx'])}")
+        print(f"\tLower left coordinate: {list(samp['ll_coord'])}")
+        print(f"\tUpper right coordinate: {list(samp['ur_coord'])}")
+        print(f"\tChannels: {samp['channels']}")
+        print(f"\tAdaptive regularization scalar ('B_prev'): {list(samp['B_prev'])}")
         print("    IMAGE")
-        print("\tshape:", ims.shape)
-        print("\tdtype:", ims.dtype)
-        print("\tmin:", np.min(ims.numpy(), (1, 2, 3)))
-        print("\tmax:", np.max(ims.numpy(), (1, 2, 3)))
+        print(f"\tAF image shape: {samp['A'].shape}")
+        print(f"\tIF image shape: {samp['B'].shape}")
+        print(f"\tAF image dtype: {samp['A'].dtype}")
+        print(f"\tIF image dtype: {samp['B'].dtype}")
+        print(f"\tAF image max: {np.max(samp['A'].numpy(), (1, 2, 3))}")
+        print(f"\tAF image min: {np.min(samp['A'].numpy(), (1, 2, 3))}")
+        print(f"\tIF image max: {np.max(samp['B'].numpy(), (1, 2, 3))}")
+        print(f"\tIF image min: {np.min(samp['B'].numpy(), (1, 2, 3))}")
         print("\n")
         break
