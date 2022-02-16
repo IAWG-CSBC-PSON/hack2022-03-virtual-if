@@ -355,7 +355,7 @@ if __name__ == "__main__":
 
     ## Images were tiled according to "tile_shape" above
     ## Unless you have a lot of memory we likely we want to resize images to at most 256x256
-    ## For some reason 
+    ## For some reason BILINEAR interpolation throws an error (I think this is a Torch bug)
     af_transform = Compose([Resize((256, 256), InterpolationMode.BICUBIC),])
     if_transform = Compose([Resize((256, 256), InterpolationMode.BICUBIC),])
 
