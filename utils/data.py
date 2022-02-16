@@ -253,7 +253,9 @@ class VIFDataset(Dataset):
             "tile_idx": idx,
             "ll_coord": ll_coord,
             "ur_coord": ur_coord, 
-            "channels": channels
+            "channels": channels,
+            "A_paths": "",
+            "B_paths": "",
         }
 
     def __len__(self):
@@ -326,7 +328,7 @@ if __name__ == "__main__":
     ## Note: not yet tested with the SHIFT repo
     ## Note: whole slide images are copied, but can be easily modified to copy image tiles
     shift_data_path = "/home/users/strgar/strgar/vif-hack/data/shift"
-    physical_dirs_from_virtual(shift_data_path, virtual_dir)
+    # physical_dirs_from_virtual(shift_data_path, virtual_dir)
 
     ## Extract "good" tiles from tissue masks contained in the virtual directory
     ## Save the good tile indices along with some metadata to a file on disk
@@ -346,20 +348,20 @@ if __name__ == "__main__":
     ##     "tile_overlap": float (0.0 - 1.0)
     ## }
     tile_data_write_dir = "/home/users/strgar/strgar/vif-hack/data/tile_data"
-    tile_shape = (512, 512)
-    tile_overlap = 0.2
-    mask_overlap = 0.75
-    if not os.path.isdir(tile_data_write_dir):
-        tile_shape=tile_shape
-        tile_overlap=tile_overlap
-        mask_overlap=mask_overlap
-        write_tile_idxs(
-            virtual_dir,
-            tile_data_write_dir,
-            tile_shape=tile_shape, 
-            tile_overlap=tile_overlap, 
-            mask_overlap=mask_overlap
-        )
+    # tile_shape = (512, 512)
+    # tile_overlap = 0.2
+    # mask_overlap = 0.75
+    # if not os.path.isdir(tile_data_write_dir):
+    #     tile_shape=tile_shape
+    #     tile_overlap=tile_overlap
+    #     mask_overlap=mask_overlap
+    #     write_tile_idxs(
+    #         virtual_dir,
+    #         tile_data_write_dir,
+    #         tile_shape=tile_shape, 
+    #         tile_overlap=tile_overlap, 
+    #         mask_overlap=mask_overlap
+    #     )
 
 
     ## Images were tiled according to "tile_shape" above
@@ -406,6 +408,8 @@ if __name__ == "__main__":
     #     "ll_coord": Lower left coordinate of tile,
     #     "ur_coord": Upper right coordinate of tile,, 
     #     "channels": List of marker names corresponding to IF images (e.g. ["AQP1", "Podocalyxin", "Uromodulin"])
+    #     "A_paths": "", 
+    #     "B_paths": "",
     # }
     print("\nSAMPLE TRAINING DATA")
     for i, samp in enumerate(trainloader):
