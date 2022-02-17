@@ -134,6 +134,6 @@ if __name__ == "__main__":
             out_tile *= np.iinfo(image_dtype).max
             out_tile = out_tile.astype(np.uint16)
 
-            f.create_dataset(name=str(tile_id), data=out_tile)
+            f.create_dataset(name=str(tile_id), data=out_tile, compression="gzip")
 
 
