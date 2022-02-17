@@ -26,6 +26,21 @@ from deepcell.applications import Mesmer
 
 # python -u /home/whitebr/run-mesmer.py --membrane-files /projects/compsci/USERS/alizae/Hackathon2022/Podocalyxin/S08-Podocalyxin.tiff,/projects/compsci/USERS/alizae/Hackathon2022/AQP1/S08-AQP1.tiff,/projects/compsci/USERS/alizae/Hackathon2022/Uromodulin/S08-Uromodulin.tiff --nuclear-file /projects/compsci/USERS/alizae/Hackathon2022/Nuclei/S08-Nuclei.tiff --mpp 0.65 --output-prefix /projects/compsci/whitebr/hackathon2022/S08
 
+# Hackathon runs (using nuclear stain as the membrane marker)
+# python -u /home/whitebr/run-mesmer.py --membrane-files /projects/compsci/USERS/alizae/Hackathon2022/Nuclei/S06-Nuclei.tiff --nuclear-file /projects/compsci/USERS/alizae/Hackathon2022/Nuclei/S06-Nuclei.tiff --mpp 0.65 --output-prefix /projects/compsci/whitebr/hackathon2022/S06-nuc
+
+# python -u /home/whitebr/run-mesmer.py --membrane-files /projects/compsci/USERS/alizae/Hackathon2022/Nuclei/S03-Nuclei.tiff --nuclear-file /projects/compsci/USERS/alizae/Hackathon2022/Nuclei/S03-Nuclei.tiff --mpp 0.65 --output-prefix /projects/compsci/whitebr/hackathon2022/S03-nuc
+
+# python -u /home/whitebr/run-mesmer.py --membrane-files /projects/compsci/USERS/alizae/Hackathon2022/Nuclei/S02-Nuclei.tiff --nuclear-file /projects/compsci/USERS/alizae/Hackathon2022/Nuclei/S02-Nuclei.tiff --mpp 0.65 --output-prefix /projects/compsci/whitebr/hackathon2022/S02-nuc
+
+# python -u /home/whitebr/run-mesmer.py --membrane-files /projects/compsci/USERS/alizae/Hackathon2022/Nuclei/S07-Nuclei.tiff --nuclear-file /projects/compsci/USERS/alizae/Hackathon2022/Nuclei/S07-Nuclei.tiff --mpp 0.65 --output-prefix /projects/compsci/whitebr/hackathon2022/S07-nuc
+
+# python -u /home/whitebr/run-mesmer.py --membrane-files /projects/compsci/USERS/alizae/Hackathon2022/Nuclei/S01-Nuclei.tiff --nuclear-file /projects/compsci/USERS/alizae/Hackathon2022/Nuclei/S01-Nuclei.tiff --mpp 0.65 --output-prefix /projects/compsci/whitebr/hackathon2022/S01-nuc
+
+# python -u /home/whitebr/run-mesmer.py --membrane-files /projects/compsci/USERS/alizae/Hackathon2022/Nuclei/S05-Nuclei.tiff --nuclear-file /projects/compsci/USERS/alizae/Hackathon2022/Nuclei/S05-Nuclei.tiff --mpp 0.65 --output-prefix /projects/compsci/whitebr/hackathon2022/S05-nuc
+
+# python -u /home/whitebr/run-mesmer.py --membrane-files /projects/compsci/USERS/alizae/Hackathon2022/Nuclei/S08-Nuclei.tiff --nuclear-file /projects/compsci/USERS/alizae/Hackathon2022/Nuclei/S08-Nuclei.tiff --mpp 0.65 --output-prefix /projects/compsci/whitebr/hackathon2022/S08-nuc
+
 # working off of 
 # https://github.com/vanvalenlab/deepcell-tf/blob/master/notebooks/applications/Mesmer-Application.ipynb
 # and
